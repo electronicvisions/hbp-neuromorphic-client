@@ -356,6 +356,72 @@ class JobRunner(object):
         else:
             pyNN_version = nmpi_job['hardware_config'].get("pyNN_version", DEFAULT_PYNN_VERSION)
 
+        # for cube and spikey, UHEI uses --gres options (customized saga module!)
+        if self.config.get('DEFAULT_HARDWARE_RESOURCE', None):
+            os.environ['SBATCH_GRES_OPTION'] = self.config.get('DEFAULT_HARDWARE_RESOURCE')
+
+        if self.config.get('DEFAULT_JOB_QUEUE', None):
+            job_desc.queue = self.config['DEFAULT_JOB_QUEUE']
+
+
+        platform_name = self.config.get('PLATFORM_NAME', None)
+
+        logger.info("Platform name is {}".format(platform_name))
+
+        # SPIKEY
+        if platform_name == 'Spikey':
+            # overwrite if user specified it
+            if nmpi_job['hardware_config'] and nmpi_job['hardware_config'].get('STATION', None):
+                    os.environ['SBATCH_GRES_OPTION'] = nmpi_job['hardware_config'].get('STATION')
+
+        # HICANN platform
+        elif platform_name == 'BrainScaleS':
+            if nmpi_job['hardware_config']:
+                wafer_module = nmpi_job['hardware_config'].get('WAFER_MODULE', None)
+                if wafer_module is not None:
+                    wafer_module = int(wafer_module)
+
+                    # Lab Wafers
+                    if wafer_module <= 2:
+                        job_desc.queue = 'wafer'
+
+                    # CUBE
+                    elif wafer_module > 3 and wafer_module <= 16:
+                        job_desc.queue = 'cubic'
+                        # FIXME
+                        cube_setups = {
+                            4: 'cube1',
+                            5: 'cube2',
+                            6: 'cube3',
+                        }
+
+                        os.environ['SBATCH_GRES_OPTION'] = cube_setups[wafer_module]
+
+                    # NM-PM1
+                    elif wafer_module >= 18:
+                        job_desc.queue = 'nmpm'
+                        assert type(wafer_module) is int
+                        os.environ['SBATCH_WMOD_OPTION'] = "--wmod={}".format(str(wafer_module))
+
+                        fpga = nmpi_job['hardware_config'].get('FPGA', None)
+                        if fpga:
+                            os.environ['SBATCH_WMOD_OPTION'] += " --fpga-with-aout={}".format(fpga)
+
+                        hicann = nmpi_job['hardware_config'].get('HICANN', None)
+                        if hicann:
+                            os.environ['SBATCH_WMOD_OPTION'] += " --hicann-with-aout={}".format(hicann)
+
+                    else:
+                        job_desc.queue = 'nmpm'
+                        os.environ['SBATCH_WMOD_OPTION'] = "--wmod=33"
+
+                calib_version = nmpi_job['hardware_config'].get('CALIB_VERSION', None)
+                if calib_version is not None:
+                    calib_version = int(calib_version)
+                software_version = nmpi_job['hardware_config'].get('SOFTWARE_VERSION', None)
+                if software_version is not None:
+                    software_version = int(software_version)
+
         if pyNN_version == "0.7":
             job_desc.executable = self.config['JOB_EXECUTABLE_PYNN_7']
         elif pyNN_version == "0.8":
@@ -363,7 +429,8 @@ class JobRunner(object):
         else:
             raise ValueError("Supported PyNN versions: 0.7, 0.8. {} not supported".format(pyNN_version))
 
-        if self.config['JOB_QUEUE'] is not None:
+
+        if self.config.get('JOB_QUEUE', None) is not None:
             job_desc.queue = self.config['JOB_QUEUE']  # aka SLURM "partition"
         script_name = nmpi_job.get("command", "")
         if not script_name:
