@@ -34,6 +34,7 @@ import nmpi
 import codecs
 import requests
 from requests.auth import AuthBase
+import json
 
 
 DEFAULT_SCRIPT_NAME = "run.py {system}"
@@ -93,6 +94,26 @@ def job_done(nmpi_job, saga_job):
     nmpi_job['timestamp_completion'] = timestamp
     nmpi_job['resource_usage'] = 1.0  # todo: report the actual usage
     nmpi_job['provenance'] = {}  # todo: report provenance information
+
+    # provide provenance data and resource_usage if available
+    try:
+        provdata_file = path.join(saga_job.get_description().working_directory, '._provdata')
+        with open(provdata_file, "r") as fd:
+            logger.debug("Loading provenance data from {}".format(provdata_file))
+            provdata = json.load(fd)
+            h, m, s = provdata['RunTime'].split(':') # HH:MM:SS formatted...
+            runtime = float(h) + (float(m) + float(s) / 3600) / 3600
+            logger.debug("SLURM RunTime was: {} hours".format(runtime))
+            tres = provdata['TRES'].split(',')
+            num_fpgas = len(filter(lambda elem: 'license/w' in elem, tres))
+            logger.debug("SLURM FPGA license count was: {}".format(num_fpgas))
+            nmpi_job['resource_usage'] = 1.0/48 * num_fpgas * runtime
+            logger.debug("Setting resource_usage to: {}".format(nmpi_job['resource_usage']))
+            nmpi_job['provenance'] = provdata
+            logger.debug("Setting provenance data to: {}".format(provdata))
+    except:
+        logger.warning("Could not read provenance data for job: {}".format(nmpi_job['id']))
+
     log = nmpi_job.pop("log", str())
     log += "{}    finished\n".format(datetime.now().isoformat())
     stdout, stderr = read_output(saga_job)
@@ -447,6 +468,7 @@ class JobRunner(object):
 
                 # get env
                 job_desc.pre_exec = ["source {}/env.sh".format(os.getcwd())]
+                job_desc.post_exec = ["source {}/prov.sh".format(os.getcwd())]
 
         if pyNN_version == "0.7":
             job_desc.executable = self.config['JOB_EXECUTABLE_PYNN_7']
