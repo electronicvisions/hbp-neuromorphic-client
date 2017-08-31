@@ -434,12 +434,19 @@ class JobRunner(object):
                         job_desc.queue = 'nmpm'
                         os.environ['SBATCH_WMOD_OPTION'] = "--wmod=33"
 
+                # FIXME: Is this really needed?
+                job_desc.environment = {}
+
                 calib_version = nmpi_job['hardware_config'].get('CALIB_VERSION', None)
-                if calib_version is not None:
-                    calib_version = int(calib_version)
+                if (calib_version is not None) and (not ' ' in calib_version):
+                    job_desc.environment = {'CALIB_VERSION': software_version}
+
                 software_version = nmpi_job['hardware_config'].get('SOFTWARE_VERSION', None)
-                if software_version is not None:
-                    software_version = int(software_version)
+                if (software_version is not None) and (not ' ' in software_version):
+                    job_desc.environment = {'SOFTWARE_VERSION': software_version}
+
+                # get env
+                job_desc.pre_exec = ["source {}/env.sh".format(os.getcwd())]
 
         if pyNN_version == "0.7":
             job_desc.executable = self.config['JOB_EXECUTABLE_PYNN_7']
