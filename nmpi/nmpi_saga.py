@@ -44,11 +44,29 @@ logger = logging.getLogger("NMPI")
 
 
 # status functions
-def job_pending(nmpi_job, saga_job):
+def job_submitted(nmpi_job, saga_job):
     nmpi_job['status'] = "submitted"
     log = nmpi_job.pop("log", str())
     log += "Job ID: {}\n".format(saga_job.id)
+    log += "{}    submitted\n".format(datetime.now().isoformat())
+    nmpi_job["log"] = log
+    return nmpi_job
+
+
+def job_pending(nmpi_job, saga_job):
+    nmpi_job['status'] = "pending"
+    log = nmpi_job.pop("log", str())
+    log += "Job ID: {}\n".format(saga_job.id)
     log += "{}    pending\n".format(datetime.now().isoformat())
+    nmpi_job["log"] = log
+    return nmpi_job
+
+
+def job_queued(nmpi_job, saga_job):
+    nmpi_job['status'] = "running"
+    log = nmpi_job.pop("log", str())
+    log += "Job ID: {}\n".format(saga_job.id)
+    log += "{}    queued\n".format(datetime.now().isoformat())
     nmpi_job["log"] = log
     return nmpi_job
 
@@ -100,10 +118,11 @@ def job_failed(nmpi_job, saga_job):
 
 # states switch
 default_job_states = {
-    saga.job.PENDING: job_pending,
+    saga.job.PENDING: job_queued,
     saga.job.RUNNING: job_running,
     saga.job.DONE: job_done,
     saga.job.FAILED: job_failed,
+    saga.job.CANCELED: job_failed,
 }
 
 
