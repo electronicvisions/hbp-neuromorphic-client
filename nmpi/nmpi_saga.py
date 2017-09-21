@@ -93,7 +93,8 @@ def job_done(nmpi_job, saga_job):
     timestamp = datetime.now().isoformat()
     nmpi_job['timestamp_completion'] = timestamp
     nmpi_job['resource_usage'] = 1.0  # todo: report the actual usage
-    nmpi_job['provenance'] = {}  # todo: report provenance information
+    if not nmpi_job.has_key('provenance'):
+        nmpi_job['provenance'] = {}
 
     # provide provenance data and resource_usage if available
     try:
@@ -109,7 +110,7 @@ def job_done(nmpi_job, saga_job):
             logger.debug("SLURM FPGA license count was: {}".format(num_fpgas))
             nmpi_job['resource_usage'] = 1.0/48 * num_fpgas * runtime
             logger.debug("Setting resource_usage to: {}".format(nmpi_job['resource_usage']))
-            nmpi_job['provenance'] = provdata
+            nmpi_job['provenance'].update(provdata)
             logger.debug("Setting provenance data to: {}".format(provdata))
     except:
         logger.warning("Could not read provenance data for job: {}".format(nmpi_job['id']))
